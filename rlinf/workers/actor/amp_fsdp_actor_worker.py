@@ -22,3 +22,15 @@ class AMPEmbodiedFSDPActor(AMPActorMixin, EmbodiedFSDPActor):
         super().init_worker()
         # Then initialise AMP components (discriminator, replay buffer, dataset)
         self.init_amp()
+
+    def save_checkpoint(self, save_path: str, step: int = 0) -> None:
+        # Save pi0.5 model + optimizer (base class)
+        super().save_checkpoint(save_path, step)
+        # Save discriminator + normalizer alongside the model checkpoint
+        self.save_amp_state(save_path)
+
+    def load_checkpoint(self, load_path: str) -> None:
+        # Restore pi0.5 model + optimizer (base class)
+        super().load_checkpoint(load_path)
+        # Restore discriminator + normalizer
+        self.load_amp_state(load_path)
