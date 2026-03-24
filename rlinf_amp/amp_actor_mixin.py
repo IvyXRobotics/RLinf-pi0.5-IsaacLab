@@ -136,6 +136,14 @@ class AMPActorMixin:
         self._amp_mini_batch_size = int(amp_cfg.get("mini_batch_size", 512))
         self._amp_num_discr_upd   = int(amp_cfg.get("num_discr_updates", 4))
 
+        # --- Reward saving -------------------------------------------
+        self._amp_save_rewards  = bool(amp_cfg.get("save_rewards", False))
+        self._amp_reward_dir    = amp_cfg.get("reward_save_path", None)
+        self._amp_step_count    = 0
+        if self._amp_save_rewards and self._amp_reward_dir:
+            os.makedirs(self._amp_reward_dir, exist_ok=True)
+            self.log_info(f"[AMP] Saving rewards to: {self._amp_reward_dir}")
+
         self.log_info(
             f"[AMP] Discriminator input_dim={obs_dim}×2, "
             f"hidden={list(amp_cfg.discr_hidden_dims)}, "
@@ -220,6 +228,16 @@ class AMPActorMixin:
         # Stash for metrics logging
         self._amp_last_amp_reward_mean  = amp_reward_only.mean().item()
         self._amp_last_task_reward_mean = flat_task.mean().item()
+
+        # --- Save per-step reward arrays to disk ----------------------
+        if self._amp_save_rewards and self._amp_reward_dir:
+            np.savez_compressed(
+                os.path.join(self._amp_reward_dir, f"step_{self._amp_step_count:06d}.npz"),
+                amp_reward   = amp_reward_only.detach().cpu().numpy(),   # (N,)
+                task_reward  = flat_task.detach().cpu().numpy(),          # (N,)
+                mixed_reward = mixed_reward.detach().cpu().numpy(),       # (N,)
+            )
+        self._amp_step_count += 1
 
         # --- Normal GAE on mixed rewards ------------------------------
         rollout_metrics = super().compute_advantages_and_returns()
