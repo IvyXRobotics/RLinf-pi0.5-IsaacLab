@@ -32,15 +32,36 @@ import torch
 
 # Supported AMP observation terms and their slice widths
 _TERM_DIMS = {
-    "joint_pos": 9,
-    "joint_vel": 9,
-    "eef_pos":   3,
-    "eef_quat":  4,
+    "joint_pos":   9,
+    "joint_vel":   9,
+    "eef_pos":     3,
+    "eef_quat":    4,
+    "axis_angle":  3,   # converted from eef_quat at load time
+    "gripper_pos": 2,
 }
 
 # Option B default: eef_pos only (3-dim) — no env patch required.
+# Option C: full states vector (8-dim) — eef_pos + axis_angle + gripper_pos.
 # Upgrade to ["joint_pos", "joint_vel", "eef_pos", "eef_quat"] for Option A.
 DEFAULT_AMP_OBS_TERMS: List[str] = ["eef_pos"]
+
+
+def _quat_wxyz_to_axis_angle(quat_wxyz: torch.Tensor) -> torch.Tensor:
+    """Convert quaternion (w,x,y,z) to axis-angle (3-dim).
+
+    Matches the conversion done in IsaaclabStackCubeEnv._wrap_obs:
+        quat = obs["eef_quat"][:, [1,2,3,0]]   # wxyz -> xyzw
+        axis_angle = quat2axisangle_torch(quat)
+    We reproduce the same math here without importing isaaclab.
+    """
+    w = quat_wxyz[:, 0].clamp(-1.0, 1.0)
+    xyz = quat_wxyz[:, 1:]                       # (N, 3)
+    theta = 2.0 * torch.acos(w)                 # rotation angle (N,)
+    sin_half = torch.sin(theta / 2.0)            # (N,)
+    # avoid division by zero for near-zero rotations
+    safe_sin = sin_half.clamp(min=1e-7)
+    axis = xyz / safe_sin.unsqueeze(-1)          # (N, 3)
+    return axis * theta.unsqueeze(-1)            # (N, 3)
 
 
 class HDF5MotionDataset:
@@ -102,14 +123,23 @@ class HDF5MotionDataset:
                 demos = demos[:demo_limit]
 
             for demo in demos:
-                T = f[f"data/{demo}/obs/joint_pos"].shape[0]
+                T = f[f"data/{demo}/obs/eef_pos"].shape[0]
                 if T < 2:
                     # Need at least one transition
                     continue
                 traj_lengths.append(T)
                 for term in self.amp_obs_terms:
-                    arr = f[f"data/{demo}/obs/{term}"][:]  # (T, dim)
-                    buffers[term].append(torch.tensor(arr, dtype=torch.float32))
+                    if term == "axis_angle":
+                        # Convert eef_quat (wxyz) -> axis_angle (3-dim)
+                        quat = torch.tensor(
+                            f[f"data/{demo}/obs/eef_quat"][:], dtype=torch.float32
+                        )
+                        arr_t = _quat_wxyz_to_axis_angle(quat)
+                    else:
+                        arr_t = torch.tensor(
+                            f[f"data/{demo}/obs/{term}"][:], dtype=torch.float32
+                        )
+                    buffers[term].append(arr_t)
 
         # Concatenate into single large tensors  (total_T, dim)
         self._data: dict[str, torch.Tensor] = {}

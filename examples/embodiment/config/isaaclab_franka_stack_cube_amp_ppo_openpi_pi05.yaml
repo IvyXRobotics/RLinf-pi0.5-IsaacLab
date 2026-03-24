@@ -171,8 +171,10 @@ amp:
   # Override at CLI with amp.hdf5_path=/workspace/RLinf/datasets/rendered.hdf5
   hdf5_path: "/path/to/datasets/rendered.hdf5"
 
-  # Option B: eef_pos only → 3-dim discriminator, no env patch needed.
-  obs_terms: [eef_pos]
+  # Option C: full states vector (8-dim) — matches IsaaclabStackCubeEnv._wrap_obs exactly.
+  # states = [eef_pos(3) | axis_angle(3) | gripper_pos(2)]
+  # axis_angle is converted from eef_quat at dataset load time. No env changes needed.
+  obs_terms: [eef_pos, axis_angle, gripper_pos]
 
   # Total reward = (1 - task_reward_lerp) * amp_reward + task_reward_lerp * task_reward
   reward_coef: 0.5

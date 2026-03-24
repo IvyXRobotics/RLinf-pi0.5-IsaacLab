@@ -157,21 +157,25 @@ class AMPActorMixin:
     def _extract_amp_obs(
         self, obs_dict: dict
     ) -> torch.Tensor | None:
-        """Extract AMP obs (eef_pos) from ``states[..., 0:3]``.
+        """Extract AMP obs from the leading dims of the states vector.
 
-        Option B: no separate amp_obs key needed.  eef_pos is the first 3
-        elements of the states vector produced by IsaaclabStackCubeEnv._wrap_obs:
-            states = [eef_pos(3), eef_axis_angle(3), gripper_pos(2)]
+        The states vector produced by IsaaclabStackCubeEnv._wrap_obs is:
+            states = [eef_pos(3) | axis_angle(3) | gripper_pos(2)]  → 8-dim
 
-        Shape from batch: [T, B, state_dim] → returns (T*B, 3).
+        We take the first ``observation_dim`` elements, which matches whatever
+        obs_terms are configured:
+            obs_terms: [eef_pos]                        → obs_dim=3  → states[:, :3]
+            obs_terms: [eef_pos, axis_angle, gripper_pos] → obs_dim=8 → states[:, :8]
+
+        Shape from batch: [T, B, state_dim] → returns (T*B, obs_dim).
         Returns None if states is absent.
         """
         states = obs_dict.get("states", None)
         if states is None:
             return None
-        # Flatten leading dims to (N, state_dim), then slice eef_pos
+        obs_dim = self.amp_motion_dataset.observation_dim
         flat = states.reshape(-1, states.shape[-1])
-        return flat[:, :3]  # eef_pos
+        return flat[:, :obs_dim]
 
     # ------------------------------------------------------------------
     # Override: compute_advantages_and_returns
