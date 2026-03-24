@@ -82,6 +82,7 @@ algorithm:
 
 env:
   group_name: "EnvGroup"
+  collect_transitions: True
 
   train:
     total_num_envs: 64
