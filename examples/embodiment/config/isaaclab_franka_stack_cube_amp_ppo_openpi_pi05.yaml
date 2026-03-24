@@ -197,4 +197,4 @@ amp:
   # Save per-step reward arrays to disk for later analysis / reward labeling.
   # Each step writes step_XXXXXX.npz with keys: amp_reward, task_reward, mixed_reward.
   save_rewards: false
-  reward_save_path: "${runner.logger.log_path}/amp_rewards"
+  reward_save_path: "/workspace/RLinf/rewards"
