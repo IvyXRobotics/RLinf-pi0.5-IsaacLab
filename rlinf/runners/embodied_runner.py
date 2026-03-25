@@ -427,6 +427,16 @@ class EmbodiedRunner:
         os.makedirs(actor_save_path, exist_ok=True)
         self.actor.save_checkpoint(actor_save_path, self.global_step).wait()
 
+        # Keep a "latest" symlink so the most recent checkpoint is always findable
+        latest_link = os.path.join(
+            self.cfg.runner.logger.log_path,
+            self.cfg.runner.logger.experiment_name,
+            "checkpoints/latest",
+        )
+        if os.path.islink(latest_link):
+            os.remove(latest_link)
+        os.symlink(os.path.abspath(base_output_dir), latest_link)
+
     def set_max_steps(self):
         self.num_steps_per_epoch = 1
         self.max_steps = self.num_steps_per_epoch * self.cfg.runner.max_epochs
