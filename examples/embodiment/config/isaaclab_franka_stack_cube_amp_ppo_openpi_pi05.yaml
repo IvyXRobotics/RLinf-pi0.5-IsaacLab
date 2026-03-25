@@ -20,7 +20,7 @@ cluster:
 runner:
   task_type: embodied
   logger:
-    log_path: "../results"
+    log_path: "${oc.env:EMBODIED_PATH}/../../results"
     project_name: rlinf
     experiment_name: "isaaclab_amp_ppo_openpi_pi05"
     logger_backends: ["tensorboard"]
