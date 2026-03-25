@@ -219,6 +219,15 @@ class AMPActorMixin:
         task_reward = self.rollout_batch["rewards"]  # [T, B, ...]
         flat_task   = task_reward.reshape(-1).to(self.device)
 
+        # AMP obs are at env-step level; rewards are at action-chunk token level.
+        # Repeat each obs row so shapes align with flat_task.
+        n_amp = amp_obs_t.shape[0]
+        n_rew = flat_task.shape[0]
+        if n_rew != n_amp and n_rew % n_amp == 0:
+            repeat = n_rew // n_amp
+            amp_obs_t   = amp_obs_t.repeat_interleave(repeat, dim=0)
+            amp_obs_tp1 = amp_obs_tp1.repeat_interleave(repeat, dim=0)
+
         mixed_reward, _, amp_reward_only = self.amp_discriminator.predict_amp_reward(
             state       = amp_obs_t,
             next_state  = amp_obs_tp1,
