@@ -206,6 +206,12 @@ class AMPActorMixin:
         amp_obs_t   = amp_obs_t.to(self.device)
         amp_obs_tp1 = amp_obs_tp1.to(self.device)
 
+        # Drop curr_obs/next_obs from rollout_batch now that AMP obs are extracted.
+        # These contain large image tensors that would otherwise be serialized and
+        # moved to GPU during PPO training, causing memory/SIGSEGV issues.
+        self.rollout_batch.pop("curr_obs", None)
+        self.rollout_batch.pop("next_obs", None)
+
         # --- Store in replay buffer -----------------------------------
         # Split into per-env transitions for the ring buffer
         self.amp_replay_buffer.insert(
