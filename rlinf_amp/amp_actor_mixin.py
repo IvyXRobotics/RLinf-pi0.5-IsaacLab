@@ -390,7 +390,7 @@ class AMPActorMixin:
             self.log_warning(f"[AMP] No checkpoint found at {path}, starting fresh.")
             return
         device = self.device if isinstance(self.device, (str, torch.device)) else f"cuda:{self.device}"
-        state = torch.load(path, map_location=device)
+        state = torch.load(path, map_location=device, weights_only=False)
         self.amp_discriminator.load_state_dict(state["discriminator"])
         self.amp_discr_optimizer.load_state_dict(state["discr_optimizer"])
         self.amp_normalizer.load_state_dict(state["normalizer"])
