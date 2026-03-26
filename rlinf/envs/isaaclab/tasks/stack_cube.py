@@ -82,11 +82,17 @@ class IsaaclabStackCubeEnv(IsaaclabBaseEnv):
         quat = obs["policy"]["eef_quat"][
             :, [1, 2, 3, 0]
         ]  # In isaaclab, quat is wxyz not like libero
+        eef_pos = obs["policy"]["eef_pos"]                    # (N, 3)
+        cube_positions = obs["policy"]["cube_positions"]       # (N, 9): cube1|cube2|cube3
+        cube1_pos = cube_positions[:, 0:3]
+        cube2_pos = cube_positions[:, 3:6]
         states = torch.concatenate(
             [
-                obs["policy"]["eef_pos"],
-                quat2axisangle_torch(quat),
-                obs["policy"]["gripper_pos"],
+                eef_pos,                          # 3  — end-effector position
+                quat2axisangle_torch(quat),       # 3  — end-effector orientation
+                obs["policy"]["gripper_pos"],     # 2  — gripper opening
+                eef_pos - cube1_pos,              # 3  — approach vector (closes to 0 at grasp)
+                cube1_pos - cube2_pos,            # 3  — stacking progress (closes to 0 at stack)
             ],
             dim=1,
         )

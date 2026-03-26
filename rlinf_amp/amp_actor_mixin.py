@@ -14,8 +14,9 @@ Subclass EmbodiedFSDPActor and mix in AMPActorMixin:
 The mixin overrides two methods:
 
     compute_advantages_and_returns()
-        1.  Extracts AMP obs from ``curr_obs["states"][..., 0:3]`` (eef_pos) and
-            ``next_obs["states"][..., 0:3]`` — no env patch required (Option B).
+        1.  Extracts AMP obs from ``curr_obs["states"][..., :obs_dim]`` and
+            ``next_obs["states"][..., :obs_dim]``.  obs_dim is read dynamically
+            from the HDF5MotionDataset (currently 14-dim with cube-relative obs).
         2.  Stores policy transitions in the AMP replay buffer.
         3.  Runs the discriminator to compute style rewards.
         4.  Mixes AMP reward into task reward:
@@ -36,7 +37,7 @@ Add the following section to the training yaml:
     amp:
       enabled: true
       hdf5_path: "/path/to/rendered.hdf5"
-      obs_terms: [eef_pos]            # Option B: 3-dim, no env changes needed
+      obs_terms: [eef_pos, axis_angle, gripper_pos, rel_eef_cube1, rel_cube1_cube2]  # 14-dim
       reward_coef: 0.5               # amp_reward_coef
       task_reward_lerp: 0.9          # alpha (0=pure AMP, 1=pure task)
       discr_hidden_dims: [256, 256]
@@ -157,15 +158,15 @@ class AMPActorMixin:
     def _extract_amp_obs(
         self, obs_dict: dict
     ) -> torch.Tensor | None:
-        """Extract AMP obs from the leading dims of the states vector.
+        """Extract AMP obs from the states vector.
 
         The states vector produced by IsaaclabStackCubeEnv._wrap_obs is:
-            states = [eef_pos(3) | axis_angle(3) | gripper_pos(2)]  → 8-dim
+            states = [eef_pos(3) | axis_angle(3) | gripper_pos(2)
+                      | rel_eef_cube1(3) | rel_cube1_cube2(3)]  → 14-dim
 
-        We take the first ``observation_dim`` elements, which matches whatever
-        obs_terms are configured:
-            obs_terms: [eef_pos]                        → obs_dim=3  → states[:, :3]
-            obs_terms: [eef_pos, axis_angle, gripper_pos] → obs_dim=8 → states[:, :8]
+        obs_dim is read dynamically from the HDF5MotionDataset, so this
+        function works correctly for any obs_terms configuration in the yaml.
+        The AMP obs is always the first obs_dim elements of states.
 
         Shape from batch: [T, B, state_dim] → returns (T*B, obs_dim).
         Returns None if states is absent.
@@ -384,14 +385,27 @@ class AMPActorMixin:
         )
 
     def load_amp_state(self, save_dir: str) -> None:
-        """Restore discriminator weights and normaliser state."""
+        """Restore discriminator weights and normaliser state.
+
+        If the checkpoint was saved with a different obs_dim (e.g. an old 8-dim
+        checkpoint when the current config uses 14-dim), the discriminator
+        weights will not match and we start fresh rather than crashing.
+        """
         path = os.path.join(save_dir, "amp_state.pt")
         if not os.path.isfile(path):
             self.log_warning(f"[AMP] No checkpoint found at {path}, starting fresh.")
             return
         device = self.device if isinstance(self.device, (str, torch.device)) else f"cuda:{self.device}"
         state = torch.load(path, map_location=device, weights_only=False)
-        self.amp_discriminator.load_state_dict(state["discriminator"])
-        self.amp_discr_optimizer.load_state_dict(state["discr_optimizer"])
-        self.amp_normalizer.load_state_dict(state["normalizer"])
-        self.log_info(f"[AMP] Loaded checkpoint from {path}")
+        try:
+            self.amp_discriminator.load_state_dict(state["discriminator"])
+            self.amp_discr_optimizer.load_state_dict(state["discr_optimizer"])
+            self.amp_normalizer.load_state_dict(state["normalizer"])
+            self.log_info(f"[AMP] Loaded checkpoint from {path}")
+        except RuntimeError as e:
+            self.log_warning(
+                f"[AMP] Checkpoint at {path} is incompatible with current "
+                f"obs_dim={self.amp_motion_dataset.observation_dim} "
+                f"(likely an old checkpoint with different AMP obs). "
+                f"Starting discriminator from scratch. Error: {e}"
+            )

@@ -12,13 +12,25 @@ Option B (default): AMP observation = eef_pos only (3-dim).
 Option A (upgrade): set amp_obs_terms=["joint_pos","joint_vel","eef_pos","eef_quat"]
     Richer 25-dim style signal, but requires adding amp_obs to _wrap_obs.
 
+Option D (current): 14-dim with cube-relative obs.
+    states = [eef_pos(3) | axis_angle(3) | gripper_pos(2) | rel_eef_cube1(3) | rel_cube1_cube2(3)]
+    obs_terms: [eef_pos, axis_angle, gripper_pos, rel_eef_cube1, rel_cube1_cube2]
+
+    rel_eef_cube1   = eef_pos - cube1_pos    (approach vector, closes to 0 at grasp)
+    rel_cube1_cube2 = cube1_pos - cube2_pos  (stacking progress, closes to 0 at stack)
+
+    Both are derived from cube_positions (T, 9) = [cube1_xyz | cube2_xyz | cube3_xyz]
+    which is already present in rendered.hdf5.  No re-collection needed.
+
 Only obs-level data is used; camera images and actions are ignored.
 
 Dataset layout expected (mirrors rendered.hdf5):
-    /data/demo_N/obs/eef_pos          (T, 3)   float32  ← used by default
-    /data/demo_N/obs/joint_pos        (T, 9)   float32  ← Option A
-    /data/demo_N/obs/joint_vel        (T, 9)   float32  ← Option A
-    /data/demo_N/obs/eef_quat         (T, 4)   float32  ← Option A
+    /data/demo_N/obs/eef_pos          (T, 3)   float32
+    /data/demo_N/obs/joint_pos        (T, 9)   float32
+    /data/demo_N/obs/joint_vel        (T, 9)   float32
+    /data/demo_N/obs/eef_quat         (T, 4)   float32
+    /data/demo_N/obs/gripper_pos      (T, 2)   float32
+    /data/demo_N/obs/cube_positions   (T, 9)   float32  ← cube1|cube2|cube3 xyz
 """
 
 from __future__ import annotations
@@ -32,18 +44,20 @@ import torch
 
 # Supported AMP observation terms and their slice widths
 _TERM_DIMS = {
-    "joint_pos":   9,
-    "joint_vel":   9,
-    "eef_pos":     3,
-    "eef_quat":    4,
-    "axis_angle":  3,   # converted from eef_quat at load time
-    "gripper_pos": 2,
+    "joint_pos":      9,
+    "joint_vel":      9,
+    "eef_pos":        3,
+    "eef_quat":       4,
+    "axis_angle":     3,   # converted from eef_quat at load time
+    "gripper_pos":    2,
+    "rel_eef_cube1":  3,   # eef_pos - cube1_pos  (approach vector)
+    "rel_cube1_cube2": 3,  # cube1_pos - cube2_pos (stacking progress)
 }
 
-# Option B default: eef_pos only (3-dim) — no env patch required.
-# Option C: full states vector (8-dim) — eef_pos + axis_angle + gripper_pos.
-# Upgrade to ["joint_pos", "joint_vel", "eef_pos", "eef_quat"] for Option A.
-DEFAULT_AMP_OBS_TERMS: List[str] = ["eef_pos"]
+# Option D (current): 14-dim with cube-relative obs.
+# Matches IsaaclabStackCubeEnv._wrap_obs exactly.
+DEFAULT_AMP_OBS_TERMS: List[str] = ["eef_pos", "axis_angle", "gripper_pos",
+                                     "rel_eef_cube1", "rel_cube1_cube2"]
 
 
 def _quat_wxyz_to_axis_angle(quat_wxyz: torch.Tensor) -> torch.Tensor:
@@ -135,6 +149,21 @@ class HDF5MotionDataset:
                             f[f"data/{demo}/obs/eef_quat"][:], dtype=torch.float32
                         )
                         arr_t = _quat_wxyz_to_axis_angle(quat)
+                    elif term == "rel_eef_cube1":
+                        # eef_pos - cube1_pos: approach vector (closes to 0 at grasp)
+                        eef = torch.tensor(
+                            f[f"data/{demo}/obs/eef_pos"][:], dtype=torch.float32
+                        )
+                        cube_pos = torch.tensor(
+                            f[f"data/{demo}/obs/cube_positions"][:], dtype=torch.float32
+                        )
+                        arr_t = eef - cube_pos[:, 0:3]
+                    elif term == "rel_cube1_cube2":
+                        # cube1_pos - cube2_pos: stacking progress (closes to 0 at stack)
+                        cube_pos = torch.tensor(
+                            f[f"data/{demo}/obs/cube_positions"][:], dtype=torch.float32
+                        )
+                        arr_t = cube_pos[:, 0:3] - cube_pos[:, 3:6]
                     else:
                         arr_t = torch.tensor(
                             f[f"data/{demo}/obs/{term}"][:], dtype=torch.float32

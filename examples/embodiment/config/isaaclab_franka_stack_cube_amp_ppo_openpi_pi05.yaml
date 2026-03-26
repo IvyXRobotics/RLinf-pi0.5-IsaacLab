@@ -172,10 +172,12 @@ amp:
   # Override at CLI with amp.hdf5_path=/workspace/RLinf/datasets/rendered.hdf5
   hdf5_path: "/path/to/datasets/rendered.hdf5"
 
-  # Option C: full states vector (8-dim) — matches IsaaclabStackCubeEnv._wrap_obs exactly.
-  # states = [eef_pos(3) | axis_angle(3) | gripper_pos(2)]
-  # axis_angle is converted from eef_quat at dataset load time. No env changes needed.
-  obs_terms: [eef_pos, axis_angle, gripper_pos]
+  # Option D (current): 14-dim with cube-relative obs.
+  # states = [eef_pos(3) | axis_angle(3) | gripper_pos(2) | rel_eef_cube1(3) | rel_cube1_cube2(3)]
+  # rel_eef_cube1   = eef_pos - cube1_pos  (approach vector, translation-invariant, closes to 0 at grasp)
+  # rel_cube1_cube2 = cube1_pos - cube2_pos (stacking progress, closes to 0 when cube1 placed on cube2)
+  # Relative positions used (not absolute) so discriminator is invariant to randomized cube placement.
+  obs_terms: [eef_pos, axis_angle, gripper_pos, rel_eef_cube1, rel_cube1_cube2]
 
   # Total reward = (1 - task_reward_lerp) * amp_reward + task_reward_lerp * task_reward
   reward_coef: 0.5
