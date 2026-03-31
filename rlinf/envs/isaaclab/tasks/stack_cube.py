@@ -86,20 +86,32 @@ class IsaaclabStackCubeEnv(IsaaclabBaseEnv):
         cube_positions = obs["policy"]["cube_positions"]       # (N, 9): cube1|cube2|cube3
         cube1_pos = cube_positions[:, 0:3]
         cube2_pos = cube_positions[:, 3:6]
+        axis_angle = quat2axisangle_torch(quat)
+        gripper_pos = obs["policy"]["gripper_pos"]
+        robot_states = torch.concatenate(
+            [
+                eef_pos,        # 3  — end-effector position
+                axis_angle,     # 3  — end-effector orientation
+                gripper_pos,    # 2  — gripper opening
+            ],
+            dim=1,
+        )  # 8-dim: used by VLA model (matches SFT norm stats)
+
         states = torch.concatenate(
             [
                 eef_pos,                          # 3  — end-effector position
-                quat2axisangle_torch(quat),       # 3  — end-effector orientation
-                obs["policy"]["gripper_pos"],     # 2  — gripper opening
+                axis_angle,                       # 3  — end-effector orientation
+                gripper_pos,                      # 2  — gripper opening
                 eef_pos - cube1_pos,              # 3  — approach vector (closes to 0 at grasp)
                 cube1_pos - cube2_pos,            # 3  — stacking progress (closes to 0 at stack)
             ],
             dim=1,
-        )
+        )  # 14-dim: used by AMP discriminator
 
         env_obs = {
             "main_images": table_image,
             "task_descriptions": instruction,
+            "robot_states": robot_states,
             "states": states,
             "wrist_images": wrist_image,
         }

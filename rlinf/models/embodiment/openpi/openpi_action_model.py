@@ -451,7 +451,7 @@ class OpenPi0ForRLActionPrediction(PI0Pytorch, BasePolicy):
             processed_obs["observation/state_ee_rot"] = state[:, 3:6]
             processed_obs["observation/state_gripper"] = state[:, 6:7]
         else:
-            processed_obs["observation/state"] = env_obs["states"]
+            processed_obs["observation/state"] = env_obs.get("robot_states", env_obs["states"])
         # wrist image observation
         if env_obs["wrist_images"] is not None:
             processed_obs["observation/wrist_image"] = env_obs["wrist_images"]
