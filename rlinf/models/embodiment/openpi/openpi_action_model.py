@@ -246,7 +246,7 @@ class OpenPi0ForRLActionPrediction(PI0Pytorch, BasePolicy):
     def input_transform(self, obs: dict, transpose=True):
         inputs = jax.tree.map(lambda x: x, obs)
         # process input
-        first_process = "prompt" in inputs.keys()
+        first_process = "prompt" in inputs.keys() and obs.get("prompt") is not None
         if first_process:
             inputs.pop("prompt")
         else:
