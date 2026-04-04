@@ -5,7 +5,7 @@
 #SBATCH --mem=64G
 #SBATCH --time=16:00:00
 #SBATCH --output=%x_%j.log
-#SBATCH --exclusive
+#SBATCH --cpus-per-task=8
 
 apptainer exec --nv \
   --bind ~/scratch/Mar15-RLinf:/workspace/RLinf \
