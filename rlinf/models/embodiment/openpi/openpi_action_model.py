@@ -246,7 +246,10 @@ class OpenPi0ForRLActionPrediction(PI0Pytorch, BasePolicy):
     def input_transform(self, obs: dict, transpose=True):
         inputs = jax.tree.map(lambda x: x, obs)
         # process input
-        first_process = "prompt" in inputs.keys() and obs.get("prompt") is not None
+        # first_process=True: "prompt" key is present (env rollout path) — tokenize fresh.
+        # first_process=False: no "prompt" key (training forward path) — reuse cached tokenized_prompt.
+        # When prompt=None (e.g. task_descriptions not set), treat as first_process but use placeholder.
+        first_process = "prompt" in inputs.keys()
         if first_process:
             inputs.pop("prompt")
         else:
@@ -272,7 +275,8 @@ class OpenPi0ForRLActionPrediction(PI0Pytorch, BasePolicy):
             else:
                 sample = jax.tree.map(lambda x: x if len(x.shape) == 3 else x, sample)
             if first_process:
-                sample["prompt"] = obs["prompt"][i]
+                # obs["prompt"] can be None when task_descriptions is not provided; use placeholder in that case
+                sample["prompt"] = obs["prompt"][i] if obs.get("prompt") is not None else "xxxx"
             else:
                 sample["prompt"] = "xxxx"
             transformed_sample = self._input_transform(sample)

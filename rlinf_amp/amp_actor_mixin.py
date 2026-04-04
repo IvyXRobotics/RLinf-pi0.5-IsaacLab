@@ -345,15 +345,14 @@ class AMPActorMixin:
             # --- Backward -------------------------------------------
             self.amp_discr_optimizer.zero_grad()
             loss.backward()
+            # Clip discriminator gradients to prevent GPU instability from
+            # large gradient-penalty second-order gradients.
+            torch.nn.utils.clip_grad_norm_(
+                list(self.amp_discriminator.trunk.parameters())
+                + list(self.amp_discriminator.amp_linear.parameters()),
+                max_norm=1.0,
+            )
             self.amp_discr_optimizer.step()
-
-            # --- Normaliser update (CPU) ------------------------------
-            self.amp_normalizer.update(
-                policy_s.detach().cpu().numpy()
-            )
-            self.amp_normalizer.update(
-                expert_s.detach().cpu().numpy()
-            )
 
             total_amp_loss    += amp_loss.item()
             total_grad_pen    += grad_pen.item()
