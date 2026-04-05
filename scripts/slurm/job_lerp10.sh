@@ -21,6 +21,7 @@ apptainer exec --nv \
     cd /workspace/RLinf
     ray stop --force || true
     export EMBODIED_PATH=/workspace/RLinf/examples/embodiment
+    export DISPLAY=""
 
     HYDRA_FULL_ERROR=1 TORCH_CPP_LOG_LEVEL=INFO NCCL_DEBUG=WARN PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True \
     python /workspace/RLinf/examples/embodiment/train_embodied_agent_amp.py \
